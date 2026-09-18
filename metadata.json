@@ -1,0 +1,6 @@
+{
+  "name": "GigCred - Explainable Gig Credit & Income Twin",
+  "description": "AI engine converting UPI transaction history into explainable cashflow credit scores, 30/60/90-day Vertex income forecasts, and Monte Carlo-simulated Income Twin loan stress testing for India's 180M gig workers.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
