@@ -1,0 +1,105 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net: Default-deny all access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(workerId) {
+      return isSignedIn() && request.auth.uid == workerId;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidWorker(data) {
+      return data.keys().hasAll(['uid', 'name', 'cashflowScore', 'createdAt']) &&
+             data.uid == request.auth.uid &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.cashflowScore is number && data.cashflowScore >= 300 && data.cashflowScore <= 900 &&
+             data.createdAt is string && data.createdAt.size() <= 40;
+    }
+
+    function isValidStatement(data, workerId) {
+      return data.keys().hasAll(['id', 'userId', 'fileName', 'status', 'uploadedAt']) &&
+             data.userId == workerId &&
+             data.fileName is string && data.fileName.size() > 0 && data.fileName.size() <= 150 &&
+             data.status in ['PROCESSING', 'VERIFIED', 'FAILED'] &&
+             data.uploadedAt is string && data.uploadedAt.size() <= 40;
+    }
+
+    function isValidSimulation(data, workerId) {
+      return data.keys().hasAll(['id', 'userId', 'principal', 'dailyEmi', 'safeZone', 'createdAt']) &&
+             data.userId == workerId &&
+             data.principal is number && data.principal > 0 && data.principal <= 500000 &&
+             data.dailyEmi is number && data.dailyEmi >= 0 &&
+             data.safeZone in ['OPTIMAL', 'MODERATE', 'CAUTION', 'DANGER'] &&
+             data.createdAt is string && data.createdAt.size() <= 40;
+    }
+
+    function isValidLoanApplication(data, workerId) {
+      return data.keys().hasAll(['id', 'userId', 'lenderName', 'amount', 'status', 'appliedAt']) &&
+             data.userId == workerId &&
+             data.lenderName is string && data.lenderName.size() > 0 && data.lenderName.size() <= 100 &&
+             data.amount is number && data.amount > 0 && data.amount <= 500000 &&
+             data.status in ['PENDING', 'PRE_APPROVED', 'DISBURSED', 'REJECTED'] &&
+             data.appliedAt is string && data.appliedAt.size() <= 40;
+    }
+
+    match /workers/{workerId} {
+      allow get: if isOwner(workerId) && isValidId(workerId);
+      allow list: if false;
+      allow create: if isOwner(workerId) && isValidId(workerId) && isValidWorker(incoming());
+      allow update: if isOwner(workerId) && isValidId(workerId) && isValidWorker(incoming()) &&
+                       incoming().uid == existing().uid &&
+                       incoming().createdAt == existing().createdAt;
+      allow delete: if isOwner(workerId) && isValidId(workerId);
+
+      // Subcollection: Statements
+      match /statements/{statementId} {
+        allow get: if isOwner(workerId) && isValidId(statementId);
+        allow list: if isOwner(workerId);
+        allow create: if isOwner(workerId) && isValidId(statementId) && isValidStatement(incoming(), workerId);
+        allow update: if isOwner(workerId) && isValidId(statementId) && isValidStatement(incoming(), workerId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().id == existing().id;
+        allow delete: if isOwner(workerId) && isValidId(statementId);
+      }
+
+      // Subcollection: Income Twin Simulations
+      match /simulations/{simulationId} {
+        allow get: if isOwner(workerId) && isValidId(simulationId);
+        allow list: if isOwner(workerId);
+        allow create: if isOwner(workerId) && isValidId(simulationId) && isValidSimulation(incoming(), workerId);
+        allow update: if isOwner(workerId) && isValidId(simulationId) && isValidSimulation(incoming(), workerId) &&
+                         incoming().userId == existing().userId;
+        allow delete: if isOwner(workerId) && isValidId(simulationId);
+      }
+
+      // Subcollection: Loan Applications
+      match /loanApplications/{applicationId} {
+        allow get: if isOwner(workerId) && isValidId(applicationId);
+        allow list: if isOwner(workerId);
+        allow create: if isOwner(workerId) && isValidId(applicationId) && isValidLoanApplication(incoming(), workerId);
+        allow update: if isOwner(workerId) && isValidId(applicationId) && isValidLoanApplication(incoming(), workerId) &&
+                         existing().status != 'DISBURSED' && existing().status != 'REJECTED';
+        allow delete: if false;
+      }
+    }
+  }
+}

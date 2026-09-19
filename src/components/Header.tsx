@@ -1,7 +1,7 @@
 import React from 'react';
 import { Language, WorkerProfile } from '../types';
 import { SAMPLE_PROFILES } from '../data/sampleProfiles';
-import { ShieldCheck, Cpu, Volume2, Sparkles, HelpCircle, Layers, CheckCircle2 } from 'lucide-react';
+import { ShieldCheck, Cpu, Volume2, Sparkles, HelpCircle, Layers, CheckCircle2, Database } from 'lucide-react';
 
 interface HeaderProps {
   currentLanguage: Language;
@@ -10,6 +10,8 @@ interface HeaderProps {
   onSelectProfile: (profile: WorkerProfile) => void;
   onOpenGcpPipeline: () => void;
   onOpenDemoTour: () => void;
+  isDbConnected?: boolean;
+  dbSyncCount?: number;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -19,6 +21,8 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectProfile,
   onOpenGcpPipeline,
   onOpenDemoTour,
+  isDbConnected = true,
+  dbSyncCount = 0,
 }) => {
   return (
     <header id="app-header" className="border-b border-slate-800/80 bg-slate-900/90 backdrop-blur-md sticky top-0 z-40">
@@ -28,6 +32,10 @@ export const Header: React.FC<HeaderProps> = ({
           <span className="flex items-center gap-1.5 text-emerald-400 font-semibold uppercase tracking-wider text-[10px]">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
             Google Cloud Stack:
+          </span>
+          <span className="bg-slate-800/80 text-emerald-300 px-2 py-0.5 rounded border border-emerald-700/60 font-mono text-[11px] flex items-center gap-1">
+            <Database className="w-3 h-3 text-emerald-400" />
+            Firestore Database {isDbConnected ? '• Live' : '• Connecting...'}
           </span>
           <span className="bg-slate-800/80 text-slate-300 px-2 py-0.5 rounded border border-slate-700/60 font-mono text-[11px]">
             Document AI (UPI OCR)

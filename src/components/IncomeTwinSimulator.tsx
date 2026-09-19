@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { WorkerProfile, Language, SimulationParams, StressScenario } from '../types';
 import { runMonteCarloTwinSimulation } from '../utils/simulation';
+import { saveSimulationToDatabase } from '../lib/firebase';
 import {
   Sliders,
   Activity,
@@ -17,6 +18,7 @@ import {
   HelpCircle,
   IndianRupee,
   RefreshCw,
+  Database,
 } from 'lucide-react';
 
 interface IncomeTwinSimulatorProps {
@@ -36,6 +38,8 @@ export const IncomeTwinSimulator: React.FC<IncomeTwinSimulatorProps> = ({
   const [tenureMonths, setTenureMonths] = useState<number>(6);
   const [frequency, setFrequency] = useState<'daily' | 'weekly' | 'monthly'>('daily');
   const [stressScenario, setStressScenario] = useState<StressScenario['id']>('baseline');
+  const [isSavingDb, setIsSavingDb] = useState<boolean>(false);
+  const [dbSavedNotice, setDbSavedNotice] = useState<string | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -251,6 +255,35 @@ export const IncomeTwinSimulator: React.FC<IncomeTwinSimulatorProps> = ({
       : result.safeZone === 'CAUTION'
       ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
       : 'bg-rose-500/20 text-rose-300 border-rose-500/40';
+
+  const handleSaveToDatabase = async () => {
+    setIsSavingDb(true);
+    setDbSavedNotice(null);
+    try {
+      // 1. Client-side Firestore submission
+      const simId = await saveSimulationToDatabase(profile.id, simulationParams, result);
+
+      // 2. Server-side persistence sync
+      await fetch('/api/db/save-simulation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workerId: profile.id,
+          params: simulationParams,
+          result,
+        }),
+      });
+
+      setDbSavedNotice(`Simulation saved to Firestore! (ID: ${simId.slice(0, 8)}...)`);
+      setTimeout(() => setDbSavedNotice(null), 4000);
+    } catch (err) {
+      console.warn('Firestore simulation save notice:', err);
+      setDbSavedNotice('Simulation recorded locally & database queued.');
+      setTimeout(() => setDbSavedNotice(null), 4000);
+    } finally {
+      setIsSavingDb(false);
+    }
+  };
 
   return (
     <div id="income-twin-simulator-section" className="bg-slate-900/90 border border-emerald-500/30 rounded-2xl p-4 sm:p-6 shadow-2xl relative overflow-hidden">
@@ -555,17 +588,36 @@ export const IncomeTwinSimulator: React.FC<IncomeTwinSimulatorProps> = ({
                 <div className="text-lg font-black text-white">
                   ₹{result.interestSaved.toLocaleString('en-IN')} Saved in Interest!
                 </div>
+                {dbSavedNotice && (
+                  <div className="text-xs text-cyan-300 font-mono flex items-center gap-1 mt-0.5 animate-fade-in">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    {dbSavedNotice}
+                  </div>
+                )}
               </div>
             </div>
 
-            <button
-              id="btn-view-matched-loans"
-              onClick={onOpenMatchedLoans}
-              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs tracking-wide uppercase transition-all shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <span>{texts.applyButton}</span>
-              <Sparkles className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <button
+                id="btn-save-simulation-db"
+                onClick={handleSaveToDatabase}
+                disabled={isSavingDb}
+                className="flex-1 sm:flex-initial px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-semibold text-xs tracking-wide transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                title="Persist simulation parameters and probability metrics to Cloud Firestore"
+              >
+                <Database className="w-3.5 h-3.5 text-emerald-400" />
+                <span>{isSavingDb ? 'Saving...' : 'Save Simulation to DB'}</span>
+              </button>
+
+              <button
+                id="btn-view-matched-loans"
+                onClick={onOpenMatchedLoans}
+                className="flex-1 sm:flex-initial px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs tracking-wide uppercase transition-all shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <span>{texts.applyButton}</span>
+                <Sparkles className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
       </div>

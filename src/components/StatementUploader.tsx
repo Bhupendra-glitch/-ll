@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { WorkerProfile, Language, UpiTransaction } from '../types';
+import { saveStatementToDatabase } from '../lib/firebase';
 import {
   UploadCloud,
   FileText,
@@ -16,6 +17,7 @@ import {
   Table,
   Check,
   Loader2,
+  Database,
 } from 'lucide-react';
 
 interface StatementUploaderProps {
@@ -152,9 +154,36 @@ export const StatementUploader: React.FC<StatementUploaderProps> = ({
       setProcessingStage('dlp');
       setTimeout(() => {
         setProcessingStage('scoring');
-        setTimeout(() => {
+        setTimeout(async () => {
           setProcessingStage('done');
           onAnalyze(`Ingested UPI PDF Statement: ${fileName} (${fileSize})`);
+
+          // Save statement metadata to Firestore and backend audit database
+          try {
+            await saveStatementToDatabase(selectedProfile.id, {
+              fileName,
+              fileSize,
+              txCount: selectedProfile.recentTransactions.length || selectedProfile.upiTxCount || 85,
+              ocrConfidence: 98.4,
+              status: 'VERIFIED',
+            });
+            await fetch('/api/db/save-statement', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                workerId: selectedProfile.id,
+                statement: {
+                  fileName,
+                  fileSize,
+                  txCount: selectedProfile.recentTransactions.length || selectedProfile.upiTxCount || 85,
+                  ocrConfidence: 98.4,
+                  status: 'VERIFIED',
+                },
+              }),
+            });
+          } catch (err) {
+            console.warn('Firestore statement save notice:', err);
+          }
         }, 600);
       }, 600);
     }, 600);

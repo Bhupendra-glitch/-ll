@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { SAMPLE_PROFILES } from './data/sampleProfiles';
 import { WorkerProfile, Language } from './types';
 import { Header } from './components/Header';
@@ -10,6 +10,7 @@ import { VernacularVoiceAssistant } from './components/VernacularVoiceAssistant'
 import { MatchedLoansModal } from './components/MatchedLoansModal';
 import { GcpPipelineModal } from './components/GcpPipelineModal';
 import { DemoTourModal } from './components/DemoTourModal';
+import { testFirestoreConnection, initAuthListener, syncWorkerToDatabase } from './lib/firebase';
 import { ShieldCheck, Heart, Sparkles, ExternalLink, Cpu } from 'lucide-react';
 
 export default function App() {
@@ -20,6 +21,52 @@ export default function App() {
   const [isGcpPipelineOpen, setIsGcpPipelineOpen] = useState<boolean>(false);
   const [isDemoTourOpen, setIsDemoTourOpen] = useState<boolean>(false);
   const [voiceTriggerLoanAmount, setVoiceTriggerLoanAmount] = useState<number>(35000);
+  const [isDbConnected, setIsDbConnected] = useState<boolean>(true);
+  const [authUserId, setAuthUserId] = useState<string>('');
+
+  // Initialize Firebase Auth & test Firestore connection on mount
+  useEffect(() => {
+    // 1. Check connection
+    testFirestoreConnection().then((connected) => {
+      setIsDbConnected(connected);
+    });
+
+    // 2. Initialize anonymous auth session
+    const unsubscribe = initAuthListener((user) => {
+      setAuthUserId(user.uid);
+      // Synchronize initial worker profile to Firestore
+      syncWorkerToDatabase(user.uid, selectedProfile).catch((err) => {
+        console.warn('Initial profile sync note:', err);
+      });
+      // Also persist to server backend
+      fetch('/api/db/sync-worker', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workerId: user.uid,
+          profile: selectedProfile,
+        }),
+      }).catch((e) => console.warn('Server sync note:', e));
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // When selectedProfile changes, sync to Firestore
+  useEffect(() => {
+    const idToSync = authUserId || selectedProfile.id;
+    syncWorkerToDatabase(idToSync, selectedProfile).catch((err) => {
+      console.warn('Profile change sync note:', err);
+    });
+    fetch('/api/db/sync-worker', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        workerId: idToSync,
+        profile: selectedProfile,
+      }),
+    }).catch(() => {});
+  }, [selectedProfile, authUserId]);
 
   // Trigger statement analysis simulation via server or deterministic model
   const handleAnalyzeStatement = async (customText?: string) => {
@@ -93,6 +140,7 @@ export default function App() {
         onSelectProfile={handleSelectProfile}
         onOpenGcpPipeline={() => setIsGcpPipelineOpen(true)}
         onOpenDemoTour={() => setIsDemoTourOpen(true)}
+        isDbConnected={isDbConnected}
       />
 
       {/* Main Content Area */}

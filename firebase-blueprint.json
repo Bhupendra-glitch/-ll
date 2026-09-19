@@ -1,0 +1,92 @@
+{
+  "entities": {
+    "Worker": {
+      "title": "Worker",
+      "description": "Gig worker digital identity and cashflow risk profile",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string", "maxLength": 100 },
+        "occupation": { "type": "string", "maxLength": 100 },
+        "city": { "type": "string", "maxLength": 60 },
+        "monthlyAvgInflow": { "type": "number" },
+        "monthlyNetSurplus": { "type": "number" },
+        "dailyActiveDays": { "type": "number" },
+        "cashflowScore": { "type": "number" },
+        "confidenceScore": { "type": "number" },
+        "riskTier": { "type": "string", "enum": ["PRIME_GIG", "NEAR_PRIME", "DEVELOPING"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "name", "cashflowScore", "createdAt"]
+    },
+    "Statement": {
+      "title": "Statement",
+      "description": "Ingested UPI / Bank statement metadata with Document AI extraction results",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "fileName": { "type": "string", "maxLength": 150 },
+        "fileSize": { "type": "string", "maxLength": 20 },
+        "txCount": { "type": "number" },
+        "ocrConfidence": { "type": "number" },
+        "status": { "type": "string", "enum": ["PROCESSING", "VERIFIED", "FAILED"] },
+        "uploadedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "fileName", "status", "uploadedAt"]
+    },
+    "Simulation": {
+      "title": "Simulation",
+      "description": "Monte Carlo Income Twin live cashflow simulation record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "principal": { "type": "number" },
+        "tenureMonths": { "type": "number" },
+        "dailyEmi": { "type": "number" },
+        "interestSaved": { "type": "number" },
+        "defaultProbability": { "type": "number" },
+        "safeZone": { "type": "string", "enum": ["OPTIMAL", "MODERATE", "CAUTION", "DANGER"] },
+        "scenario": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "principal", "dailyEmi", "safeZone", "createdAt"]
+    },
+    "LoanApplication": {
+      "title": "LoanApplication",
+      "description": "Application submitted to formal partner credit institution",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "lenderName": { "type": "string", "maxLength": 100 },
+        "amount": { "type": "number" },
+        "tenureMonths": { "type": "number" },
+        "repaymentMode": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "PRE_APPROVED", "DISBURSED", "REJECTED"] },
+        "appliedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "lenderName", "amount", "status", "appliedAt"]
+    }
+  },
+  "firestore": {
+    "/workers/{workerId}": {
+      "schema": "Worker",
+      "description": "Individual gig worker profile and calculated credit score"
+    },
+    "/workers/{workerId}/statements/{statementId}": {
+      "schema": "Statement",
+      "description": "Subcollection of ingested UPI statements parsed by Document AI"
+    },
+    "/workers/{workerId}/simulations/{simulationId}": {
+      "schema": "Simulation",
+      "description": "Subcollection of Monte Carlo loan stress simulations run by worker"
+    },
+    "/workers/{workerId}/loanApplications/{applicationId}": {
+      "schema": "LoanApplication",
+      "description": "Subcollection of applications to formal lenders"
+    }
+  }
+}

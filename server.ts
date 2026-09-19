@@ -259,6 +259,168 @@ Provide a concise, direct, helpful answer in 2-3 sentences. Focus on cashflow sa
   }
 });
 
+// In-memory backing store for server-side persistence & stats aggregation
+const serverDatabase = {
+  workers: new Map<string, any>(),
+  statements: new Map<string, any[]>(),
+  simulations: new Map<string, any[]>(),
+  loanApplications: new Map<string, any[]>(),
+};
+
+// Database Endpoint: Sync & Persist Worker Profile
+app.post("/api/db/sync-worker", (req, res) => {
+  try {
+    const { workerId, profile } = req.body;
+    if (!workerId) {
+      return res.status(400).json({ success: false, error: "workerId is required" });
+    }
+    const record = {
+      ...profile,
+      workerId,
+      updatedAt: new Date().toISOString(),
+    };
+    serverDatabase.workers.set(workerId, record);
+
+    res.json({
+      success: true,
+      workerId,
+      persistedAt: record.updatedAt,
+      message: "Worker profile synchronized to database",
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Database Endpoint: Save Ingested Statement Metadata
+app.post("/api/db/save-statement", (req, res) => {
+  try {
+    const { workerId, statement } = req.body;
+    if (!workerId || !statement) {
+      return res.status(400).json({ success: false, error: "workerId and statement data required" });
+    }
+    const statementId = `stmt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const record = {
+      id: statementId,
+      workerId,
+      ...statement,
+      createdAt: new Date().toISOString(),
+    };
+    const list = serverDatabase.statements.get(workerId) || [];
+    list.unshift(record);
+    serverDatabase.statements.set(workerId, list);
+
+    res.json({
+      success: true,
+      statementId,
+      record,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Database Endpoint: Record Monte Carlo Simulation Run
+app.post("/api/db/save-simulation", (req, res) => {
+  try {
+    const { workerId, params, result } = req.body;
+    if (!workerId || !params || !result) {
+      return res.status(400).json({ success: false, error: "Missing simulation payload" });
+    }
+    const simulationId = `sim_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const record = {
+      id: simulationId,
+      workerId,
+      principal: params.principal,
+      tenureMonths: params.tenureMonths,
+      dailyEmi: result.emiAmount,
+      interestSaved: result.interestSaved,
+      defaultProbability: result.defaultProbability,
+      safeZone: result.safeZone,
+      scenario: params.stressScenario,
+      createdAt: new Date().toISOString(),
+    };
+    const list = serverDatabase.simulations.get(workerId) || [];
+    list.unshift(record);
+    serverDatabase.simulations.set(workerId, list);
+
+    res.json({
+      success: true,
+      simulationId,
+      record,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Database Endpoint: Submit Formal Loan Application
+app.post("/api/db/apply-loan", (req, res) => {
+  try {
+    const { workerId, product, amount, tenureMonths, applicantName, cashflowScore } = req.body;
+    if (!workerId || !product) {
+      return res.status(400).json({ success: false, error: "Missing loan application details" });
+    }
+    const applicationId = `app_gc_${Date.now()}_${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+    const applicationRecord = {
+      id: applicationId,
+      workerId,
+      applicantName: applicantName || "Gig Worker",
+      lenderName: product.lenderName,
+      productName: product.name,
+      amount: amount || product.maxAmount,
+      tenureMonths: tenureMonths || 6,
+      repaymentMode: product.repaymentMode,
+      interestRateAnnual: product.interestRateAnnual,
+      cashflowScore: cashflowScore || 740,
+      status: "PRE_APPROVED",
+      approvalTimestamp: new Date().toISOString(),
+      disbursementChannel: "UPI Instant e-Mandate",
+    };
+
+    const list = serverDatabase.loanApplications.get(workerId) || [];
+    list.unshift(applicationRecord);
+    serverDatabase.loanApplications.set(workerId, list);
+
+    res.json({
+      success: true,
+      applicationId,
+      status: "PRE_APPROVED",
+      application: applicationRecord,
+      message: `Application pre-approved by ${product.lenderName} with e-Mandate autodebit!`,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Database Endpoint: Get Worker History & Aggregated Audit Records
+app.get("/api/db/worker-stats/:workerId", (req, res) => {
+  try {
+    const { workerId } = req.params;
+    const profile = serverDatabase.workers.get(workerId) || null;
+    const statements = serverDatabase.statements.get(workerId) || [];
+    const simulations = serverDatabase.simulations.get(workerId) || [];
+    const loanApplications = serverDatabase.loanApplications.get(workerId) || [];
+
+    res.json({
+      success: true,
+      workerId,
+      profile,
+      counts: {
+        statements: statements.length,
+        simulations: simulations.length,
+        loanApplications: loanApplications.length,
+      },
+      recentStatements: statements.slice(0, 5),
+      recentSimulations: simulations.slice(0, 5),
+      recentLoanApplications: loanApplications.slice(0, 5),
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Start server with Vite middleware in dev or static files in prod
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
